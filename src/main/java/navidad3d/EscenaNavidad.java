@@ -36,10 +36,12 @@ public class EscenaNavidad {
 
     // Piñata
     private Node pinataMesh;
+    private Group pinataGroup; // Grupo para la piñata completa (cuerpo y picos)
     private Timeline animacionLuces;
 
     // Luces navideñas
     private List<Node> lucesNavidenas = new ArrayList<>();
+    private List<PointLight> lucesPuntuales = new ArrayList<>();
     private int patronLucesActual = 0;
     private Color[] coloresNavidenos = {
         Color.RED, Color.GREEN, Color.BLUE, Color.YELLOW,
@@ -48,6 +50,8 @@ public class EscenaNavidad {
 
     public EscenaNavidad() {
         inicializarEscena();
+        configurarCieloEstrellado(); // Crear el cielo estrellado
+        configurarLuna(); // Añadir la luna
         configurarCamara();
         cargarModelo();
         configurarIluminacion();
@@ -60,6 +64,95 @@ public class EscenaNavidad {
     private void inicializarEscena() {
         root = new Group();
         musicController = new MusicController();
+    }
+
+    private void configurarLuna() {
+        try {
+            // Cargar la textura de la luna. Asumimos que se llama 'luna.jpg' o 'moon.png'
+            InputStream textureStream = getClass().getResourceAsStream("/textures/luna.jpg");
+            if (textureStream == null) {
+                textureStream = getClass().getResourceAsStream("/textures/moon.png"); // Intento alternativo
+            }
+            if (textureStream == null) {
+                 System.err.println("No se encontró la textura de la luna en /textures/luna.jpg o /textures/moon.png");
+                 return;
+            }
+
+            javafx.scene.image.Image moonTexture = new javafx.scene.image.Image(textureStream);
+
+            if (moonTexture.isError()) {
+                System.err.println("Error al decodificar la textura de la luna.");
+                return;
+            }
+
+            // Crear el material para la luna. La clave es el 'selfIlluminationMap'.
+            PhongMaterial moonMaterial = new PhongMaterial();
+            moonMaterial.setDiffuseMap(moonTexture);
+            moonMaterial.setSelfIlluminationMap(moonTexture); // Esto hace que la luna brille.
+            moonMaterial.setSpecularColor(Color.TRANSPARENT); // No queremos reflejos de luz en la luna.
+
+            // Crear la esfera que representará la luna
+            Sphere luna = new Sphere(50); // Un tamaño visible a la distancia
+            luna.setMaterial(moonMaterial);
+
+            // Posicionar la luna en una esquina superior del cielo
+            luna.setTranslateX(300);
+            luna.setTranslateY(-350); // Muy arriba en la escena
+            luna.setTranslateZ(800);  // Lejos en la distancia
+
+            root.getChildren().add(luna);
+            System.out.println("Luna añadida a la escena.");
+
+        } catch (Exception e) {
+            System.err.println("No se pudo configurar la luna. Causa: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private void configurarCieloEstrellado() {
+        Group estrellasGroup = new Group();
+        Random rand = new Random();
+
+        // Material para las estrellas (blanco y no reflectante para que no dependan de la luz)
+        PhongMaterial starMaterial = new PhongMaterial(Color.WHITE);
+        starMaterial.setSpecularColor(Color.TRANSPARENT); // Sin brillo especular
+
+        for (int i = 0; i < 1500; i++) { // 1500 estrellas para un cielo poblado
+            double size = 0.05 + rand.nextDouble() * 0.1;
+            Sphere estrella = new Sphere(size);
+            estrella.setMaterial(starMaterial);
+
+            // Posición aleatoria en una esfera grande alrededor de la escena para dar profundidad
+            double distancia = 400 + rand.nextDouble() * 1000;
+            double anguloTheta = rand.nextDouble() * 2 * Math.PI;
+            double anguloPhi = Math.acos(2 * rand.nextDouble() - 1);
+
+            double x = distancia * Math.sin(anguloPhi) * Math.cos(anguloTheta);
+            // La Y del modelo está invertida, por eso se ajusta la Y de las estrellas
+            double y = - (distancia * Math.cos(anguloPhi));
+            double z = distancia * Math.sin(anguloPhi) * Math.sin(anguloTheta);
+
+            estrella.setTranslateX(x);
+            estrella.setTranslateY(y);
+            estrella.setTranslateZ(z);
+
+            estrellasGroup.getChildren().add(estrella);
+
+            // Añadir animación de parpadeo a un 10% de las estrellas para dar vida a la escena
+            if (rand.nextDouble() < 0.1) {
+                FadeTransition ft = new FadeTransition(Duration.seconds(1.5 + rand.nextDouble() * 2), estrella);
+                ft.setFromValue(0.3);
+                ft.setToValue(1.0);
+                ft.setCycleCount(Timeline.INDEFINITE);
+                ft.setAutoReverse(true);
+                ft.setInterpolator(Interpolator.EASE_BOTH);
+                ft.play();
+            }
+        }
+
+        // Añadir el grupo de estrellas al principio del 'root' para que actúe como fondo
+        root.getChildren().add(0, estrellasGroup);
+        System.out.println("Cielo estrellado configurado.");
     }
 
     private void configurarCamara() {
@@ -128,55 +221,68 @@ public class EscenaNavidad {
     }
 
     private void configurarIluminacion() {
-        // Luz ambiental
-        AmbientLight luzAmbiental = new AmbientLight(Color.gray(0.4));
+        // Luz ambiental muy oscura para simular la noche.
+        AmbientLight luzAmbiental = new AmbientLight(Color.gray(0.15));
         root.getChildren().add(luzAmbiental);
 
-        // Luz puntual 1 (frontal)
-        PointLight luz1 = new PointLight(Color.WHITE);
-        luz1.setTranslateX(0);
-        luz1.setTranslateY(-30);
-        luz1.setTranslateZ(-20);
-        root.getChildren().add(luz1);
+        // Luz principal que simula un farol o una fuente de luz cálida cercana.
+        PointLight luzPrincipal = new PointLight(Color.ORANGE.deriveColor(0, 1, 0.7, 1));
+        luzPrincipal.setTranslateX(0);
+        luzPrincipal.setTranslateY(-10); // Posicionada más abajo
+        luzPrincipal.setTranslateZ(-15);
+        root.getChildren().add(luzPrincipal);
 
-        // Luz puntual 2 (lateral derecha)
-        PointLight luz2 = new PointLight(Color.gray(0.8));
-        luz2.setTranslateX(20);
-        luz2.setTranslateY(-20);
-        luz2.setTranslateZ(10);
-        root.getChildren().add(luz2);
-
-        // Luz puntual 3 (lateral izquierda)
-        PointLight luz3 = new PointLight(Color.gray(0.6));
-        luz3.setTranslateX(-20);
-        luz3.setTranslateY(-20);
-        luz3.setTranslateZ(10);
-        root.getChildren().add(luz3);
-
-        System.out.println("Iluminación configurada");
+        // Luz de relleno azulada y muy sutil para simular el reflejo del cielo nocturno.
+        PointLight luzRelleno = new PointLight(Color.rgb(100, 120, 180, 0.25)); // Azulada y débil
+        luzRelleno.setTranslateX(0);
+        luzRelleno.setTranslateY(-40);
+        luzRelleno.setTranslateZ(50); // Posicionada detrás de la escena
+        root.getChildren().add(luzRelleno);
+        
+        System.out.println("Iluminación nocturna configurada.");
     }
 
     private void configurarPinata() {
-        // Buscar el nodo de la piñata en el grafo de escena
-        pinataMesh = buscarNodoPorId(modeloGroup, "pinata_mesh");
+        // Buscar TODAS las partes de la piñata, ya que el log muestra que todas se llaman 'pinata_mesh'
+        List<Node> partesPinata = buscarTodosLosNodosPorId(modeloGroup, "pinata_mesh");
 
-        if (pinataMesh != null) {
-            System.out.println("Piñata encontrada, configurando animación...");
-
-            // Aplicar rotación continua sobre su propio eje (Y) para mostrar los picos laterales
-            RotateTransition rotacion = new RotateTransition(Duration.seconds(3), pinataMesh);
-            rotacion.setAxis(Rotate.Y_AXIS);  // Gira sobre sí misma mostrando los picos de los lados
-            rotacion.setByAngle(360);
-            rotacion.setCycleCount(Timeline.INDEFINITE);
-            rotacion.setInterpolator(Interpolator.LINEAR);
-            rotacion.play();
-
-            // Configurar evento de click
-            pinataMesh.setOnMouseClicked(event -> romperPinata());
-
-        } else {
-            System.out.println("No se encontró la piñata (pinata_mesh) en el modelo");
+        if (partesPinata.isEmpty()) {
+            System.out.println("No se encontró ninguna parte de la piñata (ID: pinata_mesh) en el modelo.");
+            return;
         }
+
+        System.out.println("Encontradas " + partesPinata.size() + " partes de la piñata. Agrupando para rotación unificada...");
+
+        // Tomamos el primero como referencia para encontrar el padre en la escena.
+        pinataMesh = partesPinata.get(0);
+        Parent originalParent = pinataMesh.getParent();
+
+        // Crear un grupo para unir todas las partes.
+        // Al usar addAll, los nodos se mueven de `originalParent` a `pinataGroup`.
+        pinataGroup = new Group();
+        pinataGroup.getChildren().addAll(partesPinata);
+
+        // Añadir el nuevo grupo consolidado de vuelta al padre original.
+        if (originalParent instanceof Group) {
+            ((Group) originalParent).getChildren().add(pinataGroup);
+            System.out.println("Grupo de piñata re-insertado en la escena correctamente.");
+        } else {
+            System.err.println("El padre de la piñata no es un grupo o es nulo. La rotación podría ser incorrecta.");
+            root.getChildren().add(pinataGroup);
+        }
+        
+        // Aplicar rotación continua al grupo completo.
+        RotateTransition rotacion = new RotateTransition(Duration.seconds(8), pinataGroup);
+        rotacion.setAxis(Rotate.Y_AXIS);
+        rotacion.setByAngle(360);
+        rotacion.setCycleCount(Timeline.INDEFINITE);
+        rotacion.setInterpolator(Interpolator.LINEAR);
+        rotacion.play();
+
+        // El evento de click se asigna al grupo para que funcione en cualquier parte de la piñata.
+        pinataGroup.setOnMouseClicked(event -> romperPinata());
+        
+        System.out.println("Animación de rotación configurada para el grupo completo de la piñata.");
     }
 
     private void romperPinata() {
@@ -185,20 +291,35 @@ public class EscenaNavidad {
         // Reproducir sonido
         SoundController.reproducirGolpe();
 
-        // Generar partículas
+        if (pinataGroup == null || pinataGroup.getParent() == null || !(pinataGroup.getParent() instanceof Group)) {
+            System.err.println("No se puede generar partículas: pinataGroup o su padre no son válidos.");
+            return;
+        }
+        
+        // Las partículas deben añadirse al mismo padre que la piñata para compartir el sistema de coordenadas.
+        Group particleParent = (Group) pinataGroup.getParent();
+
+        // Calcular el centro del grupo de la piñata en el sistema de coordenadas de su padre.
+        // Este será el punto de origen de la explosión de partículas.
+        javafx.geometry.Bounds bounds = pinataGroup.getBoundsInParent();
+        double centerX = bounds.getCenterX();
+        double centerY = bounds.getCenterY();
+        double centerZ = bounds.getCenterZ();
+
         Random rand = new Random();
-        for (int i = 0; i < 15; i++) {
-            // Crear partícula (alternando entre Box y Sphere)
+        // Aumentar drásticamente el número de partículas para un efecto más vistoso.
+        for (int i = 0; i < 150; i++) {
             Node particula;
+            // Aumentar el tamaño de las partículas
+            double size = 0.2 + rand.nextDouble() * 0.3;
             if (rand.nextBoolean()) {
-                particula = new Box(0.2, 0.2, 0.2);
+                particula = new Box(size, size, size);
             } else {
-                particula = new Sphere(0.2);
+                particula = new Sphere(size / 2);
             }
 
-            // Color aleatorio
             PhongMaterial material = new PhongMaterial();
-            material.setDiffuseColor(Color.hsb(rand.nextDouble() * 360, 0.8, 0.9));
+            material.setDiffuseColor(Color.hsb(rand.nextDouble() * 360, 1.0, 1.0));
             material.setSpecularColor(Color.WHITE);
 
             if (particula instanceof Box) {
@@ -207,39 +328,62 @@ public class EscenaNavidad {
                 ((Sphere) particula).setMaterial(material);
             }
 
-            // Posición inicial (donde está la piñata)
-            if (pinataMesh != null) {
-                particula.setTranslateX(pinataMesh.getTranslateX());
-                particula.setTranslateY(pinataMesh.getTranslateY());
-                particula.setTranslateZ(pinataMesh.getTranslateZ());
-            }
+            // Posición inicial de la partícula en el centro de la piñata
+            particula.setTranslateX(centerX);
+            particula.setTranslateY(centerY);
+            particula.setTranslateZ(centerZ);
+            
+            // Añadir partícula al mismo padre que la piñata
+            particleParent.getChildren().add(particula);
 
-            // Añadir a la escena
-            root.getChildren().add(particula);
-
-            // Animación de caída con dispersión
-            TranslateTransition caida = new TranslateTransition(Duration.seconds(2), particula);
-            caida.setByY(5 + rand.nextDouble() * 3);
-            caida.setByX((rand.nextDouble() - 0.5) * 4);
-            caida.setByZ((rand.nextDouble() - 0.5) * 4);
-            caida.setInterpolator(Interpolator.EASE_IN);
-            caida.play();
-
-            // Eliminar partícula después de 3 segundos
-            final Node particulaFinal = particula;
-            Timeline eliminar = new Timeline(new KeyFrame(Duration.seconds(3), e -> {
-                root.getChildren().remove(particulaFinal);
-            }));
-            eliminar.play();
+            // Animación de caída con mayor dispersión y velocidad
+            TranslateTransition caida = new TranslateTransition(Duration.seconds(1.5 + rand.nextDouble() * 2), particula);
+            caida.setByY(15 + rand.nextDouble() * 10); // Caer más lejos
+            caida.setByX((rand.nextDouble() - 0.5) * 30); // Dispersarse mucho más
+            caida.setByZ((rand.nextDouble() - 0.5) * 30);
+            caida.setInterpolator(Interpolator.EASE_OUT); // Usar Ease_Out para un inicio rápido
+            
+            FadeTransition fadeOut = new FadeTransition(Duration.seconds(1.5 + rand.nextDouble()), particula);
+            fadeOut.setFromValue(1.0);
+            fadeOut.setToValue(0.0);
+            
+            ParallelTransition pt = new ParallelTransition(caida, fadeOut);
+            
+            // Eliminar la partícula de la escena una vez que la animación ha terminado
+            final Node finalParticle = particula;
+            pt.setOnFinished(e -> particleParent.getChildren().remove(finalParticle));
+            pt.play();
         }
     }
 
     private void configurarLucesNavidenas() {
-        // Buscar todas las luces navideñas
         lucesNavidenas = buscarNodosPorPrefijo(modeloGroup, "luz_");
 
         if (!lucesNavidenas.isEmpty()) {
-            System.out.println("Encontradas " + lucesNavidenas.size() + " luces navideñas");
+            System.out.println("Encontradas " + lucesNavidenas.size() + " luces navideñas. Creando efectos de luz y aura...");
+
+            for (Node luzMesh : lucesNavidenas) {
+                Parent parent = luzMesh.getParent();
+                if (parent == null || !(parent instanceof Group)) {
+                    System.err.println("No se pudo obtener el padre de la luz " + luzMesh.getId() + ". Usando root como fallback.");
+                    parent = root;
+                }
+
+                javafx.geometry.Bounds bounds = luzMesh.getBoundsInParent();
+                double centerX = bounds.getCenterX();
+                double centerY = bounds.getCenterY();
+                double centerZ = bounds.getCenterZ();
+
+                // --- Crear PointLight ---
+                PointLight puntoDeLuz = new PointLight();
+                puntoDeLuz.setColor(Color.WHITE); // Se establecerá en la animación
+                puntoDeLuz.setTranslateX(centerX);
+                puntoDeLuz.setTranslateY(centerY);
+                puntoDeLuz.setTranslateZ(centerZ);
+                ((Group) parent).getChildren().add(puntoDeLuz);
+                lucesPuntuales.add(puntoDeLuz);
+            }
+
             iniciarPatronLuces();
         } else {
             System.out.println("No se encontraron luces navideñas (luz_*) en el modelo");
@@ -288,27 +432,30 @@ public class EscenaNavidad {
         return new Timeline(
             new KeyFrame(Duration.ZERO, e -> {
                 for (int i = 0; i < lucesNavidenas.size(); i++) {
-                    aplicarColorALuz(lucesNavidenas.get(i), i % 2 == 0 ? Color.RED : Color.GREEN);
+                    aplicarColorALuz(i, i % 2 == 0 ? Color.RED : Color.LIMEGREEN);
                 }
             }),
             new KeyFrame(Duration.seconds(0.8), e -> {
                 for (int i = 0; i < lucesNavidenas.size(); i++) {
-                    aplicarColorALuz(lucesNavidenas.get(i), i % 2 == 0 ? Color.GREEN : Color.RED);
+                    aplicarColorALuz(i, i % 2 == 0 ? Color.LIMEGREEN : Color.RED);
                 }
             })
         );
     }
 
     private Timeline crearPatronIntermitente() {
+        // Un color base para cuando están "apagadas"
+        Color colorApagado = Color.gray(0.2);
+
         return new Timeline(
             new KeyFrame(Duration.ZERO, e -> {
-                for (Node luz : lucesNavidenas) {
-                    aplicarColorALuz(luz, Color.GOLD);
+                for (int i = 0; i < lucesNavidenas.size(); i++) {
+                    aplicarColorALuz(i, Color.GOLD);
                 }
             }),
-            new KeyFrame(Duration.seconds(0.3), e -> {
-                for (Node luz : lucesNavidenas) {
-                    aplicarColorALuz(luz, Color.DARKGRAY);
+            new KeyFrame(Duration.seconds(0.4), e -> {
+                for (int i = 0; i < lucesNavidenas.size(); i++) {
+                    aplicarColorALuz(i, colorApagado, false); // Apagar la luz puntual y el aura
                 }
             })
         );
@@ -318,20 +465,17 @@ public class EscenaNavidad {
         return new Timeline(
             new KeyFrame(Duration.seconds(0.2), e -> {
                 for (int i = 0; i < lucesNavidenas.size(); i++) {
-                    int colorIndex = (i) % coloresNavidenos.length;
-                    aplicarColorALuz(lucesNavidenas.get(i), coloresNavidenos[colorIndex]);
+                    aplicarColorALuz(i, coloresNavidenos[(i) % coloresNavidenos.length]);
                 }
             }),
             new KeyFrame(Duration.seconds(0.4), e -> {
                 for (int i = 0; i < lucesNavidenas.size(); i++) {
-                    int colorIndex = (i + 1) % coloresNavidenos.length;
-                    aplicarColorALuz(lucesNavidenas.get(i), coloresNavidenos[colorIndex]);
+                    aplicarColorALuz(i, coloresNavidenos[(i + 1) % coloresNavidenos.length]);
                 }
             }),
             new KeyFrame(Duration.seconds(0.6), e -> {
                 for (int i = 0; i < lucesNavidenas.size(); i++) {
-                    int colorIndex = (i + 2) % coloresNavidenos.length;
-                    aplicarColorALuz(lucesNavidenas.get(i), coloresNavidenos[colorIndex]);
+                    aplicarColorALuz(i, coloresNavidenos[(i + 2) % coloresNavidenos.length]);
                 }
             })
         );
@@ -341,9 +485,9 @@ public class EscenaNavidad {
         Random rand = new Random();
         return new Timeline(
             new KeyFrame(Duration.seconds(0.5), e -> {
-                for (Node luz : lucesNavidenas) {
+                for (int i = 0; i < lucesNavidenas.size(); i++) {
                     Color colorAleatorio = coloresNavidenos[rand.nextInt(coloresNavidenos.length)];
-                    aplicarColorALuz(luz, colorAleatorio);
+                    aplicarColorALuz(i, colorAleatorio);
                 }
             })
         );
@@ -352,17 +496,29 @@ public class EscenaNavidad {
     private void aplicarColoresRotados(int offset) {
         for (int i = 0; i < lucesNavidenas.size(); i++) {
             Color color = coloresNavidenos[(i + offset) % coloresNavidenos.length];
-            aplicarColorALuz(lucesNavidenas.get(i), color);
+            aplicarColorALuz(i, color);
         }
     }
 
-    private void aplicarColorALuz(Node luz, Color color) {
-        if (luz instanceof MeshView) {
-            MeshView meshView = (MeshView) luz;
+    // Sobrecarga para control de encendido/apagado
+    private void aplicarColorALuz(int index, Color color) {
+        aplicarColorALuz(index, color, true);
+    }
+
+    private void aplicarColorALuz(int index, Color color, boolean encendida) {
+        // 1. Actualizar el mesh original
+        Node luzMesh = lucesNavidenas.get(index);
+        if (luzMesh instanceof MeshView) {
+            MeshView meshView = (MeshView) luzMesh;
             if (meshView.getMaterial() instanceof PhongMaterial) {
                 ((PhongMaterial) meshView.getMaterial()).setDiffuseColor(color);
             }
         }
+
+        // 2. Actualizar la luz puntual
+        PointLight puntoDeLuz = lucesPuntuales.get(index);
+        puntoDeLuz.setColor(encendida ? color : Color.BLACK); // Usar NEGRO para "apagar" la luz
+        puntoDeLuz.setLightOn(encendida);
     }
 
     private void cambiarPatronLuces() {
@@ -458,6 +614,24 @@ public class EscenaNavidad {
         camera.setTranslateZ(camera.getTranslateZ() + movZ);
     }
 
+    private List<Node> buscarTodosLosNodosPorId(Node nodo, String id) {
+        List<Node> resultados = new ArrayList<>();
+        if (nodo == null) {
+            return resultados;
+        }
+
+        if (id.equals(nodo.getId())) {
+            resultados.add(nodo);
+        }
+
+        if (nodo instanceof Parent) {
+            for (Node hijo : ((Parent) nodo).getChildrenUnmodifiable()) {
+                resultados.addAll(buscarTodosLosNodosPorId(hijo, id));
+            }
+        }
+        return resultados;
+    }
+
     private Node buscarNodoPorId(Node nodo, String id) {
         if (id.equals(nodo.getId())) {
             return nodo;
@@ -503,9 +677,9 @@ public class EscenaNavidad {
     }
 
     public Group getRoot() {
-        // Crear SubScene con fondo
+        // Crear SubScene con fondo negro para la noche
         SubScene subScene = new SubScene(root, 1280, 720, true, SceneAntialiasing.BALANCED);
-        subScene.setFill(Color.MIDNIGHTBLUE);
+        subScene.setFill(Color.BLACK);
         subScene.setCamera(camera);
 
         // Configurar controles cuando se añada a una escena
