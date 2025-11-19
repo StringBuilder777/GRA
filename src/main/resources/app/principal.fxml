@@ -1,0 +1,13 @@
+<!-- principal.fxml -->
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane xmlns:fx="http://javafx.com/fxml" fx:controller="controller.PrincipalController">
+    <top>
+        <HBox spacing="10" alignment="CENTER" style="-fx-padding: 10;">
+            <TextField fx:id="campoYT" promptText="Buscar en YouTube..." HBox.hgrow="ALWAYS"/>
+            <Button fx:id="botonBuscar" text="Buscar y Reproducir" onAction="#buscarYReproducirYoutube"/>
+        </HBox>
+    </top>
+</BorderPane>
