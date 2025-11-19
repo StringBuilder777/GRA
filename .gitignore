@@ -30,6 +30,15 @@ target/
 build/
 !**/src/main/**/build/
 !**/src/test/**/build/
+# archivos pesados
+*.blend
+*.zip
+*.obj
+*.mtl
+
+# recursos enormes
+src/main/java/**/img/
+src/main/java/*.zip
 
 ### VS Code ###
 .vscode/
