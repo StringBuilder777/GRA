@@ -7,8 +7,14 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.paint.Color;
 import javafx.scene.paint.PhongMaterial;
 import javafx.scene.shape.Box;
+import javafx.scene.shape.CullFace;
 import javafx.scene.shape.MeshView;
 import javafx.scene.shape.Sphere;
+import javafx.scene.shape.TriangleMesh;
+import javafx.scene.shape.Path;
+import javafx.scene.shape.MoveTo;
+import javafx.scene.shape.LineTo;
+import javafx.scene.image.Image;
 import javafx.scene.transform.Rotate;
 import javafx.util.Duration;
 
@@ -58,12 +64,91 @@ public class EscenaNavidad {
         configurarPinata();
         configurarLucesNavidenas();
         configurarControles();
+        configurarAnimacionBurro(); // Animar al burro
         iniciarAnimacionCamara();
     }
 
     private void inicializarEscena() {
         root = new Group();
         musicController = new MusicController();
+    }
+
+    private void configurarAnimacionBurro() {
+        try {
+            System.out.println("🐴 Configurando burro con textura 2D...");
+
+            // Cargar imagen del burro
+            Image burroImage = new Image(getClass().getResourceAsStream("/textures/burro.png"));
+
+            if (burroImage.isError()) {
+                System.err.println("❌ Error al cargar imagen del burro");
+                return;
+            }
+
+            System.out.println("✅ Imagen del burro cargada: " + burroImage.getWidth() + "x" + burroImage.getHeight());
+
+            // Crear un plano 2D personalizado usando TriangleMesh
+            TriangleMesh planeMesh = new TriangleMesh();
+
+            // Dimensiones del plano
+            float width = 15f;
+            float height = 15f;
+
+            // Definir los 4 vértices del plano rectangular
+            planeMesh.getPoints().addAll(
+                -width/2, -height/2, 0,  // Vértice 0: inferior izquierda
+                 width/2, -height/2, 0,  // Vértice 1: inferior derecha
+                 width/2,  height/2, 0,  // Vértice 2: superior derecha
+                -width/2,  height/2, 0   // Vértice 3: superior izquierda
+            );
+
+            // Coordenadas de textura (UV mapping) - correcta orientación
+            planeMesh.getTexCoords().addAll(
+                1, 0,  // Coordenada 0: inferior derecha
+                0, 0,  // Coordenada 1: inferior izquierda
+                0, 1,  // Coordenada 2: superior izquierda
+                1, 1   // Coordenada 3: superior derecha
+            );
+
+            // Definir las dos caras del triángulo
+            planeMesh.getFaces().addAll(
+                0, 0, 1, 1, 2, 2,  // Triángulo 1
+                0, 0, 2, 2, 3, 3   // Triángulo 2
+            );
+
+            // Crear MeshView con el plano
+            MeshView burroPlane = new MeshView(planeMesh);
+            burroPlane.setCullFace(CullFace.NONE); // Visible desde ambos lados
+
+            // Aplicar la textura del burro con luz propia
+            PhongMaterial burroMaterial = new PhongMaterial();
+            burroMaterial.setDiffuseMap(burroImage);
+            burroMaterial.setDiffuseColor(Color.WHITE);
+            burroMaterial.setSelfIlluminationMap(burroImage); // Luz propia para que brille
+            burroMaterial.setSpecularColor(Color.color(0.1, 0.1, 0.1));
+            burroPlane.setMaterial(burroMaterial);
+
+            // Posicionar el burro en el suelo, lejos de las casas
+            burroPlane.setTranslateX(15);  // A la derecha
+            burroPlane.setTranslateY(6);   // Ajustado para que las patas estén sobre el piso
+            burroPlane.setTranslateZ(-10); // Un poco adelante
+
+            // Agregar a la escena
+            root.getChildren().add(burroPlane);
+
+            // Agregar luz dedicada para el burro
+            PointLight burroLight = new PointLight(Color.WHITE);
+            burroLight.setTranslateX(15);
+            burroLight.setTranslateY(6);
+            burroLight.setTranslateZ(-15);
+            root.getChildren().add(burroLight);
+
+            System.out.println("✅ Burro 2D agregado con luz propia");
+
+        } catch (Exception e) {
+            System.err.println("⚠️  Error al configurar burro: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     private void configurarLuna() {
@@ -91,14 +176,14 @@ public class EscenaNavidad {
             moonMaterial.setSelfIlluminationMap(moonTexture); // Esto hace que la luna brille.
             moonMaterial.setSpecularColor(Color.TRANSPARENT); // No queremos reflejos de luz en la luna.
 
-            // Crear la esfera que representará la luna
-            Sphere luna = new Sphere(50); // Un tamaño visible a la distancia
+            // Crear la esfera que representará la luna, mucho más grande
+            Sphere luna = new Sphere(200); // Radio aumentado para mayor visibilidad
             luna.setMaterial(moonMaterial);
 
-            // Posicionar la luna en una esquina superior del cielo
-            luna.setTranslateX(300);
-            luna.setTranslateY(-350); // Muy arriba en la escena
-            luna.setTranslateZ(800);  // Lejos en la distancia
+            // Posicionar la luna: centrada horizontalmente, muy arriba y más lejos
+            luna.setTranslateX(0);    // Centrada en X
+            luna.setTranslateY(-400);  // Más arriba
+            luna.setTranslateZ(1500); // Más lejos para parecer un cuerpo celeste distante
 
             root.getChildren().add(luna);
             System.out.println("Luna añadida a la escena.");

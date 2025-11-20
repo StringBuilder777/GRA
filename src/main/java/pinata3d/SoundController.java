@@ -25,7 +25,7 @@ public class SoundController {
     private static boolean initialized = false;
     
     // Configuración de volumen
-    private static final double DEFAULT_VOLUME = 0.7; // 70%
+    private static final double DEFAULT_VOLUME = 1.0; // 100% - Máximo volumen
     private static final double MAX_VOLUME = 1.0;
     private static final double MIN_VOLUME = 0.0;
     

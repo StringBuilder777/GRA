@@ -3,11 +3,13 @@ package pinata3d;
 import javafx.animation.*;
 import javafx.application.Application;
 import javafx.scene.*;
+import javafx.scene.image.Image;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.paint.Color;
 import javafx.scene.paint.PhongMaterial;
 import javafx.scene.shape.*;
+import javafx.scene.shape.TriangleMesh;
 import javafx.scene.transform.Rotate;
 import javafx.scene.transform.Translate;
 import javafx.stage.Stage;
@@ -126,6 +128,7 @@ public class PinataApp3D extends Application {
         setupLighting();
         setupPinata();
         setupChristmasLights();
+        setupDonkey();
         setupControls(scene);
         
         // Iniciar música
@@ -479,6 +482,92 @@ public class PinataApp3D extends Application {
                     material.setSpecularColor(Color.WHITE);
                 }
             }
+        }
+    }
+
+    /**
+     * Configura el burro estático en el fondo
+     */
+    private void setupDonkey() {
+        try {
+            System.out.println("🐴 Configurando burro estático...");
+
+            // Cargar imagen del burro
+            Image donkeyImage = new Image(getClass().getResourceAsStream("/textures/burro.png"));
+
+            if (donkeyImage.isError()) {
+                System.err.println("❌ Error al cargar imagen del burro");
+                return;
+            }
+
+            System.out.println("✅ Imagen del burro cargada: " + donkeyImage.getWidth() + "x" + donkeyImage.getHeight());
+
+            // Crear un plano 2D personalizado usando TriangleMesh
+            TriangleMesh planeMesh = new TriangleMesh();
+
+            // Dimensiones del plano (basadas en la proporción de la imagen)
+            float width = 50f;
+            float height = 50f;
+
+            // Definir los 4 vértices del plano rectangular
+            planeMesh.getPoints().addAll(
+                -width/2, -height/2, 0,  // Vértice 0: inferior izquierda
+                 width/2, -height/2, 0,  // Vértice 1: inferior derecha
+                 width/2,  height/2, 0,  // Vértice 2: superior derecha
+                -width/2,  height/2, 0   // Vértice 3: superior izquierda
+            );
+
+            // Coordenadas de textura (UV mapping)
+            planeMesh.getTexCoords().addAll(
+                0, 1,  // Coordenada 0: inferior izquierda
+                1, 1,  // Coordenada 1: inferior derecha
+                1, 0,  // Coordenada 2: superior derecha
+                0, 0   // Coordenada 3: superior izquierda
+            );
+
+            // Definir las dos caras del triángulo (6 índices = 2 triángulos)
+            // Primer triángulo: vértices 0, 1, 2
+            planeMesh.getFaces().addAll(
+                0, 0, 1, 1, 2, 2,  // Triángulo 1
+                0, 0, 2, 2, 3, 3   // Triángulo 2
+            );
+
+            // Crear MeshView con el plano
+            MeshView donkeyPlane = new MeshView(planeMesh);
+            donkeyPlane.setCullFace(CullFace.NONE); // Visible desde ambos lados
+
+            // Aplicar la textura del burro con luz propia
+            PhongMaterial donkeyMaterial = new PhongMaterial();
+            donkeyMaterial.setDiffuseMap(donkeyImage);
+            donkeyMaterial.setDiffuseColor(Color.WHITE);
+            donkeyMaterial.setSelfIlluminationMap(donkeyImage); // Luz propia
+            donkeyMaterial.setSpecularColor(Color.color(0.1, 0.1, 0.1));
+            donkeyPlane.setMaterial(donkeyMaterial);
+
+            // Posicionar el burro al lado de la piñata
+            double burroX = 40;  // A la derecha de la piñata
+            double burroY = 0;   // Mismo nivel que la piñata
+            double burroZ = 0;   // Misma profundidad que la piñata
+
+            donkeyPlane.setTranslateX(burroX);
+            donkeyPlane.setTranslateY(burroY);
+            donkeyPlane.setTranslateZ(burroZ);
+
+            // Agregar a la escena
+            sceneRoot.getChildren().add(donkeyPlane);
+
+            // Agregar luz dedicada para el burro
+            PointLight donkeyLight = new PointLight(Color.WHITE);
+            donkeyLight.setTranslateX(burroX);
+            donkeyLight.setTranslateY(burroY);
+            donkeyLight.setTranslateZ(burroZ - 20);
+            sceneRoot.getChildren().add(donkeyLight);
+
+            System.out.println("✅ Burro agregado al lado de la piñata (x=" + burroX + ") como plano 2D");
+
+        } catch (Exception e) {
+            System.err.println("⚠️  Error al cargar burro: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
