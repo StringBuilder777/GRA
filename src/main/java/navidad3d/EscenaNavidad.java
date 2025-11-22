@@ -36,14 +36,21 @@ public class EscenaNavidad {
     private Rotate rotacionX = new Rotate(0, Rotate.X_AXIS);
     private Rotate rotacionY = new Rotate(0, Rotate.Y_AXIS);
     private double mouseAnteriorX, mouseAnteriorY;
+    private boolean clickEnPinata = false;
 
     // Teclas presionadas
     private Set<KeyCode> teclasPresionadas = new HashSet<>();
+
+    // Colisiones
+    private final List<Node> collidables = new ArrayList<>();
 
     // Piñata
     private Node pinataMesh;
     private Group pinataGroup; // Grupo para la piñata completa (cuerpo y picos)
     private Timeline animacionLuces;
+
+    // Pino
+    private Group pinoGroup;
 
     // Luces navideñas
     private List<Node> lucesNavidenas = new ArrayList<>();
@@ -60,6 +67,8 @@ public class EscenaNavidad {
         configurarLuna(); // Añadir la luna
         configurarCamara();
         cargarModelo();
+        cargarPino(); // Cargar el pino
+        configurarPiso(); // Configurar el piso con textura
         configurarIluminacion();
         configurarPinata();
         configurarLucesNavidenas();
@@ -275,32 +284,188 @@ public class EscenaNavidad {
 
             root.getChildren().add(modeloGroup);
 
-            // TEST: Agregar un cubo con la textura del piso para verificar que funciona
-            try {
-                javafx.scene.image.Image testTexture = new javafx.scene.image.Image(
-                    getClass().getResourceAsStream("/textures/piso.jpg")
-                );
-                PhongMaterial testMaterial = new PhongMaterial();
-                testMaterial.setDiffuseMap(testTexture);
-                testMaterial.setDiffuseColor(Color.WHITE);
-                testMaterial.setSpecularColor(Color.gray(0.1));  // Muy poco brillo
-                testMaterial.setSpecularPower(2);  // Brillo muy difuso
-
-                Box testBox = new Box(10, 0.5, 10);
-                testBox.setMaterial(testMaterial);
-                testBox.setTranslateX(-20);
-                testBox.setTranslateY(0);
-                testBox.setTranslateZ(0);
-                root.getChildren().add(testBox);
-                System.out.println("TEST: Cubo de prueba con textura agregado");
-            } catch (Exception ex) {
-                System.err.println("TEST: Error creando cubo de prueba: " + ex.getMessage());
+            // Configurar colisiones
+            collidables.addAll(buscarNodosPorPrefijo(modeloGroup, "coll_"));
+            System.out.println("Encontrados " + collidables.size() + " objetos para colisión.");
+            for (Node collidable : collidables) {
+                collidable.setVisible(false); // Hacer invisibles los objetos de colisión
             }
 
             System.out.println("Modelo cargado correctamente");
 
         } catch (Exception e) {
             System.err.println("Error al cargar el modelo: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private void cargarPino() {
+        try {
+            System.out.println("Cargando modelo pino.obj...");
+            InputStream objStream = getClass().getResourceAsStream("/assets/pino.obj");
+
+            if (objStream == null) {
+                System.err.println("No se encontró el archivo pino.obj");
+                return;
+            }
+
+            ObjImporter importer = new ObjImporter();
+            pinoGroup = importer.cargarModelo(objStream);
+
+            // Aplicar escala similar a las casas
+            pinoGroup.setScaleX(3.0);
+            pinoGroup.setScaleY(-3.0);  // Invertir eje Y para corregir orientación
+            pinoGroup.setScaleZ(3.0);
+
+            // Rotar el pino 180 grados para que esté de frente
+            Rotate rotacion = new Rotate(180, Rotate.Y_AXIS);
+            pinoGroup.getTransforms().add(rotacion);
+
+            // Posicionar el pino atrás de las casas
+            pinoGroup.setTranslateX(0);    // Centro
+            pinoGroup.setTranslateY(0);    // Nivel del suelo
+            pinoGroup.setTranslateZ(50);   // Atrás de las casas
+
+            // Aplicar textura de piso al piso del pino
+            aplicarTexturaPisoAlPino();
+
+            root.getChildren().add(pinoGroup);
+
+            System.out.println("Pino cargado, rotado y posicionado correctamente");
+
+        } catch (Exception e) {
+            System.err.println("Error al cargar el pino: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private void aplicarTexturaPisoAlPino() {
+        try {
+            // Cargar textura del piso
+            javafx.scene.image.Image pisoTexture = new javafx.scene.image.Image(
+                getClass().getResourceAsStream("/textures/piso.jpg")
+            );
+
+            if (pisoTexture.isError()) {
+                System.err.println("Error al cargar textura del piso para el pino");
+                return;
+            }
+
+            // Crear material con la textura
+            PhongMaterial pisoMaterial = new PhongMaterial();
+            pisoMaterial.setDiffuseMap(pisoTexture);
+            pisoMaterial.setDiffuseColor(Color.WHITE);
+            pisoMaterial.setSpecularColor(Color.gray(0.05));
+            pisoMaterial.setSpecularPower(1);
+
+            // Recorrer todos los nodos del pino y buscar el que tiene el material Mat_Snow
+            aplicarTexturaRecursivo(pinoGroup, pisoMaterial);
+
+        } catch (Exception e) {
+            System.err.println("Error al aplicar textura al piso del pino: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private void aplicarTexturaRecursivo(Node nodo, PhongMaterial nuevaMaterial) {
+        if (nodo instanceof MeshView) {
+            MeshView meshView = (MeshView) nodo;
+
+            // NO tocar regalos - verificar ID del nodo
+            String nodeId = nodo.getId();
+            if (nodeId != null && (nodeId.toLowerCase().contains("regalo") ||
+                                   nodeId.toLowerCase().contains("gift") ||
+                                   nodeId.toLowerCase().contains("contenedor"))) {
+                System.out.println("Saltando regalo (no aplicar textura de piso): " + nodeId);
+                // Recursivamente aplicar a hijos pero no modificar este nodo
+                if (nodo instanceof Parent) {
+                    for (Node hijo : ((Parent) nodo).getChildrenUnmodifiable()) {
+                        aplicarTexturaRecursivo(hijo, nuevaMaterial);
+                    }
+                }
+                return;
+            }
+
+            // Verificar si el material actual es el de nieve/piso (verde)
+            if (meshView.getMaterial() instanceof PhongMaterial) {
+                PhongMaterial materialActual = (PhongMaterial) meshView.getMaterial();
+
+                // Verificar si ya tiene una textura (diffuseMap) - NO sobrescribir
+                if (materialActual.getDiffuseMap() != null) {
+                    System.out.println("Nodo " + nodeId + " ya tiene textura, no sobrescribir");
+                    // Recursivamente aplicar a hijos pero no modificar este nodo
+                    if (nodo instanceof Parent) {
+                        for (Node hijo : ((Parent) nodo).getChildrenUnmodifiable()) {
+                            aplicarTexturaRecursivo(hijo, nuevaMaterial);
+                        }
+                    }
+                    return;
+                }
+
+                Color colorActual = materialActual.getDiffuseColor();
+
+                // Verificar si es un color verdoso/blanco (Mat_Snow o piso)
+                // Mat_Snow: Kd 0.950000 0.980000 1.000000 (blanco/azulado)
+                // Pero si aparece verde, buscamos ese rango
+                if (colorActual != null) {
+                    double r = colorActual.getRed();
+                    double g = colorActual.getGreen();
+                    double b = colorActual.getBlue();
+
+                    // Detectar si es verde claro o blanco (posibles colores del piso)
+                    boolean esVerde = (g > 0.7 && g > r && g > b); // Verde
+                    boolean esBlanco = (r > 0.9 && g > 0.9 && b > 0.9); // Blanco
+
+                    if (esVerde || esBlanco) {
+                        meshView.setMaterial(nuevaMaterial);
+                        System.out.println("Textura de piso aplicada al nodo: " + nodeId +
+                                         " (color: R=" + String.format("%.2f", r) +
+                                         " G=" + String.format("%.2f", g) +
+                                         " B=" + String.format("%.2f", b) + ")");
+                    }
+                }
+            }
+        }
+
+        // Recursivamente aplicar a todos los hijos
+        if (nodo instanceof Parent) {
+            for (Node hijo : ((Parent) nodo).getChildrenUnmodifiable()) {
+                aplicarTexturaRecursivo(hijo, nuevaMaterial);
+            }
+        }
+    }
+
+    private void configurarPiso() {
+        try {
+            System.out.println("Configurando piso con textura...");
+
+            // Cargar textura del piso
+            javafx.scene.image.Image pisoTexture = new javafx.scene.image.Image(
+                getClass().getResourceAsStream("/textures/piso.jpg")
+            );
+
+            if (pisoTexture.isError()) {
+                System.err.println("Error al cargar textura del piso");
+                return;
+            }
+
+            // Crear material con la textura
+            PhongMaterial pisoMaterial = new PhongMaterial();
+            pisoMaterial.setDiffuseMap(pisoTexture);
+            pisoMaterial.setDiffuseColor(Color.WHITE);
+            pisoMaterial.setSpecularColor(Color.gray(0.05));  // Muy poco brillo
+            pisoMaterial.setSpecularPower(1);  // Brillo mínimo
+
+            // Crear un plano grande para el piso
+            Box piso = new Box(200, 0.2, 200);  // Piso grande y delgado
+            piso.setMaterial(pisoMaterial);
+            piso.setTranslateY(14.5);  // Ajustado para estar más abajo en el suelo
+
+            root.getChildren().add(piso);
+            System.out.println("Piso configurado correctamente");
+
+        } catch (Exception e) {
+            System.err.println("Error al configurar el piso: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -365,8 +530,11 @@ public class EscenaNavidad {
         rotacion.play();
 
         // El evento de click se asigna al grupo para que funcione en cualquier parte de la piñata.
-        pinataGroup.setOnMouseClicked(event -> romperPinata());
-        
+        pinataGroup.setOnMouseClicked(event -> {
+            romperPinata();
+            event.consume(); // Consumir el evento para que no se propague
+        });
+
         System.out.println("Animación de rotación configurada para el grupo completo de la piñata.");
     }
 
@@ -376,20 +544,35 @@ public class EscenaNavidad {
         // Reproducir sonido
         SoundController.reproducirGolpe();
 
-        if (pinataGroup == null || pinataGroup.getParent() == null || !(pinataGroup.getParent() instanceof Group)) {
-            System.err.println("No se puede generar partículas: pinataGroup o su padre no son válidos.");
+        if (pinataGroup == null) {
+            System.err.println("No se puede generar partículas: pinataGroup no es válido.");
             return;
         }
-        
-        // Las partículas deben añadirse al mismo padre que la piñata para compartir el sistema de coordenadas.
-        Group particleParent = (Group) pinataGroup.getParent();
 
-        // Calcular el centro del grupo de la piñata en el sistema de coordenadas de su padre.
-        // Este será el punto de origen de la explosión de partículas.
-        javafx.geometry.Bounds bounds = pinataGroup.getBoundsInParent();
-        double centerX = bounds.getCenterX();
-        double centerY = bounds.getCenterY();
-        double centerZ = bounds.getCenterZ();
+        // Calcular la posición ABSOLUTA de la piñata en el espacio 3D (en coordenadas del root)
+        javafx.geometry.Bounds boundsInScene = pinataGroup.localToScene(pinataGroup.getBoundsInLocal());
+
+        // Convertir las coordenadas de escena a coordenadas locales del root
+        javafx.geometry.Point3D centerInScene = new javafx.geometry.Point3D(
+            boundsInScene.getCenterX(),
+            boundsInScene.getCenterY(),
+            boundsInScene.getCenterZ()
+        );
+
+        // Obtener la posición absoluta considerando todas las transformaciones
+        javafx.geometry.Bounds pinataLocalBounds = pinataGroup.getBoundsInLocal();
+        double centerX = pinataGroup.localToParent(pinataLocalBounds.getCenterX(), pinataLocalBounds.getCenterY(), pinataLocalBounds.getCenterZ()).getX();
+        double centerY = pinataGroup.localToParent(pinataLocalBounds.getCenterX(), pinataLocalBounds.getCenterY(), pinataLocalBounds.getCenterZ()).getY();
+        double centerZ = pinataGroup.localToParent(pinataLocalBounds.getCenterX(), pinataLocalBounds.getCenterY(), pinataLocalBounds.getCenterZ()).getZ();
+
+        // Obtener el padre de la piñata para calcular coordenadas correctas
+        Parent pinataParent = pinataGroup.getParent();
+        if (pinataParent != null && pinataParent != root) {
+            javafx.geometry.Bounds parentBounds = pinataParent.localToParent(pinataGroup.getBoundsInParent());
+            centerX = parentBounds.getCenterX();
+            centerY = parentBounds.getCenterY();
+            centerZ = parentBounds.getCenterZ();
+        }
 
         Random rand = new Random();
         // Aumentar drásticamente el número de partículas para un efecto más vistoso.
@@ -413,13 +596,13 @@ public class EscenaNavidad {
                 ((Sphere) particula).setMaterial(material);
             }
 
-            // Posición inicial de la partícula en el centro de la piñata
+            // Posición inicial de la partícula en el centro de la piñata (coordenadas absolutas del root)
             particula.setTranslateX(centerX);
             particula.setTranslateY(centerY);
             particula.setTranslateZ(centerZ);
-            
-            // Añadir partícula al mismo padre que la piñata
-            particleParent.getChildren().add(particula);
+
+            // Añadir partícula directamente al ROOT, no al padre de la piñata
+            root.getChildren().add(particula);
 
             // Animación de caída con mayor dispersión y velocidad
             TranslateTransition caida = new TranslateTransition(Duration.seconds(1.5 + rand.nextDouble() * 2), particula);
@@ -427,27 +610,48 @@ public class EscenaNavidad {
             caida.setByX((rand.nextDouble() - 0.5) * 30); // Dispersarse mucho más
             caida.setByZ((rand.nextDouble() - 0.5) * 30);
             caida.setInterpolator(Interpolator.EASE_OUT); // Usar Ease_Out para un inicio rápido
-            
+
             FadeTransition fadeOut = new FadeTransition(Duration.seconds(1.5 + rand.nextDouble()), particula);
             fadeOut.setFromValue(1.0);
             fadeOut.setToValue(0.0);
-            
+
             ParallelTransition pt = new ParallelTransition(caida, fadeOut);
-            
+
             // Eliminar la partícula de la escena una vez que la animación ha terminado
             final Node finalParticle = particula;
-            pt.setOnFinished(e -> particleParent.getChildren().remove(finalParticle));
+            pt.setOnFinished(e -> root.getChildren().remove(finalParticle));
             pt.play();
         }
     }
 
     private void configurarLucesNavidenas() {
+        // Buscar luces en el modelo de la posada
         lucesNavidenas = buscarNodosPorPrefijo(modeloGroup, "luz_");
+        System.out.println("Encontradas " + lucesNavidenas.size() + " luces en la posada");
+
+        // Buscar luces en el pino si existe
+        if (pinoGroup != null) {
+            System.out.println("Buscando luces en el pino...");
+            List<Node> lucesPino = buscarNodosPorPrefijo(pinoGroup, "luz_");
+            System.out.println("Encontradas " + lucesPino.size() + " luces en el pino");
+
+            // Debug: listar IDs de las luces del pino
+            for (Node luz : lucesPino) {
+                System.out.println("  - Luz del pino: " + luz.getId());
+            }
+
+            lucesNavidenas.addAll(lucesPino);
+        } else {
+            System.out.println("pinoGroup es null, no se pueden buscar luces del pino");
+        }
 
         if (!lucesNavidenas.isEmpty()) {
-            System.out.println("Encontradas " + lucesNavidenas.size() + " luces navideñas. Creando efectos de luz y aura...");
+            System.out.println("Encontradas " + lucesNavidenas.size() + " luces navideñas en total. Creando efectos de luz y aura...");
 
-            for (Node luzMesh : lucesNavidenas) {
+            for (int i = 0; i < lucesNavidenas.size(); i++) {
+                Node luzMesh = lucesNavidenas.get(i);
+                System.out.println("Configurando luz #" + i + ": " + luzMesh.getId());
+
                 Parent parent = luzMesh.getParent();
                 if (parent == null || !(parent instanceof Group)) {
                     System.err.println("No se pudo obtener el padre de la luz " + luzMesh.getId() + ". Usando root como fallback.");
@@ -459,16 +663,21 @@ public class EscenaNavidad {
                 double centerY = bounds.getCenterY();
                 double centerZ = bounds.getCenterZ();
 
+                System.out.println("  Posición: X=" + centerX + " Y=" + centerY + " Z=" + centerZ);
+
                 // --- Crear PointLight ---
                 PointLight puntoDeLuz = new PointLight();
-                puntoDeLuz.setColor(Color.WHITE); // Se establecerá en la animación
+                puntoDeLuz.setColor(Color.RED); // Color inicial rojo
                 puntoDeLuz.setTranslateX(centerX);
                 puntoDeLuz.setTranslateY(centerY);
                 puntoDeLuz.setTranslateZ(centerZ);
                 ((Group) parent).getChildren().add(puntoDeLuz);
                 lucesPuntuales.add(puntoDeLuz);
+
+                System.out.println("  PointLight creado y agregado");
             }
 
+            System.out.println("Iniciando patrón de luces...");
             iniciarPatronLuces();
         } else {
             System.out.println("No se encontraron luces navideñas (luz_*) en el modelo");
@@ -641,19 +850,33 @@ public class EscenaNavidad {
 
         // Control de mouse para mirar alrededor
         scene.setOnMousePressed(event -> {
-            mouseAnteriorX = event.getSceneX();
-            mouseAnteriorY = event.getSceneY();
+            // Solo iniciar arrastre si no se clickeó en la piñata
+            if (!event.isConsumed()) {
+                mouseAnteriorX = event.getSceneX();
+                mouseAnteriorY = event.getSceneY();
+                clickEnPinata = false;
+            } else {
+                clickEnPinata = true;
+            }
         });
 
         scene.setOnMouseDragged(event -> {
-            double deltaX = event.getSceneX() - mouseAnteriorX;
-            double deltaY = event.getSceneY() - mouseAnteriorY;
+            // Solo permitir arrastre de cámara si no fue un click en la piñata
+            if (!clickEnPinata && !event.isConsumed()) {
+                double deltaX = event.getSceneX() - mouseAnteriorX;
+                double deltaY = event.getSceneY() - mouseAnteriorY;
 
-            rotacionY.setAngle(rotacionY.getAngle() + deltaX * 0.2);
-            rotacionX.setAngle(Math.max(-90, Math.min(90, rotacionX.getAngle() - deltaY * 0.2)));
+                rotacionY.setAngle(rotacionY.getAngle() + deltaX * 0.2);
+                rotacionX.setAngle(Math.max(-90, Math.min(90, rotacionX.getAngle() - deltaY * 0.2)));
 
-            mouseAnteriorX = event.getSceneX();
-            mouseAnteriorY = event.getSceneY();
+                mouseAnteriorX = event.getSceneX();
+                mouseAnteriorY = event.getSceneY();
+            }
+        });
+
+        scene.setOnMouseReleased(event -> {
+            // Resetear el flag cuando se suelta el mouse
+            clickEnPinata = false;
         });
     }
 
@@ -670,7 +893,6 @@ public class EscenaNavidad {
 
     private void actualizarCamara() {
         double movX = 0;
-        double movY = 0;
         double movZ = 0;
 
         // Calcular dirección de movimiento según rotación de cámara
@@ -693,10 +915,42 @@ public class EscenaNavidad {
             movZ += Math.sin(angleY) * velocidadCamara;
         }
 
-        // Aplicar movimiento
-        camera.setTranslateX(camera.getTranslateX() + movX);
-        camera.setTranslateY(camera.getTranslateY() + movY);
-        camera.setTranslateZ(camera.getTranslateZ() + movZ);
+        // --- Detección de colisiones ---
+        double nextX = camera.getTranslateX() + movX;
+        double nextZ = camera.getTranslateZ() + movZ;
+
+        // Crear una caja de colisión para la cámara en su próxima posición
+        Box cameraBounds = new Box(1, 1, 1);
+        cameraBounds.setTranslateX(nextX);
+        cameraBounds.setTranslateY(camera.getTranslateY());
+        cameraBounds.setTranslateZ(camera.getTranslateZ()); // Comprobar solo en X primero
+
+        boolean colisionX = false;
+        for (Node collidable : collidables) {
+            if (collidable.getBoundsInParent().intersects(cameraBounds.getBoundsInParent())) {
+                colisionX = true;
+                break;
+            }
+        }
+
+        if (!colisionX) {
+            camera.setTranslateX(nextX);
+        }
+
+        cameraBounds.setTranslateX(camera.getTranslateX()); // Usar la posición X ya validada
+        cameraBounds.setTranslateZ(nextZ); // Comprobar en Z
+
+        boolean colisionZ = false;
+        for (Node collidable : collidables) {
+            if (collidable.getBoundsInParent().intersects(cameraBounds.getBoundsInParent())) {
+                colisionZ = true;
+                break;
+            }
+        }
+
+        if (!colisionZ) {
+            camera.setTranslateZ(nextZ);
+        }
     }
 
     private List<Node> buscarTodosLosNodosPorId(Node nodo, String id) {

@@ -17,7 +17,7 @@ public class Main extends Application {
         try {
             // Crear la escena navideña 3D
             escenaNavidad = new EscenaNavidad();
-            Scene scene = new Scene(escenaNavidad.getRoot(), 1280, 720, true);
+            var scene = new Scene(escenaNavidad.getRoot(), 1280, 720, true);
 
             // Configurar el Stage
             primaryStage.setTitle("Posada Navideña 3D");

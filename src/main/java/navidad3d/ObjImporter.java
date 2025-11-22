@@ -193,6 +193,11 @@ public class ObjImporter {
         int indiceVertice = 0;
         int indiceTextura = 0;
 
+        String[] partesClave = clave.split("___MAT___");
+        String nombreObjeto = partesClave[0];
+        String nombreMaterial = partesClave.length > 1 ? partesClave[1] : "default";
+        boolean esPuerta = nombreMaterial.toLowerCase().contains("puerta");
+
         for (Face cara : caras) {
             // Convertir cara a triángulos (triangulación simple para n-gons)
             for (int i = 1; i < cara.vertices.size() - 1; i++) {
@@ -216,10 +221,18 @@ public class ObjImporter {
                     // Añadir coordenada de textura si no existe
                     if (!texturasIndices.containsKey(vt)) {
                         if (vt >= 0 && vt * 2 + 1 < texturas.size()) {
-                            mesh.getTexCoords().addAll(
-                                texturas.get(vt * 2),
-                                texturas.get(vt * 2 + 1)
-                            );
+                            float u = texturas.get(vt * 2);
+                            float v_coord = texturas.get(vt * 2 + 1);
+
+                            // SOLUCIÓN DEFINITIVA: Combinar inversión y escalado para corregir proporción y orientación.
+                            if (esPuerta) {
+                                // Escalar por 0.5 para corregir la proporción de la imagen (que es 1:2)
+                                // Restar de 1.0 para invertir la coordenada V para JavaFX (origen arriba-izquierda)
+                                // Esto mapea la puerta a la MITAD SUPERIOR de la textura.
+                                v_coord = 1.0f - (v_coord * 0.5f);
+                            }
+
+                            mesh.getTexCoords().addAll(u, v_coord);
                         } else {
                             mesh.getTexCoords().addAll(0f, 0f);
                         }
@@ -238,19 +251,21 @@ public class ObjImporter {
             }
         }
 
-        // Debug: Mostrar estadísticas del mesh
-        String[] partesClave = clave.split("___MAT___");
-        String nombreObjeto = partesClave[0];
-        if (nombreObjeto.toLowerCase().contains("calle") || nombreObjeto.toLowerCase().contains("piso")) {
-            System.out.println("=== DEBUG MESH: " + nombreObjeto + " ===");
-            System.out.println("  Puntos (vertices): " + mesh.getPoints().size() / 3);
-            System.out.println("  TexCoords (UV): " + mesh.getTexCoords().size() / 2);
-            System.out.println("  Faces (triangles): " + mesh.getFaces().size() / 6);
-            if (mesh.getTexCoords().size() > 0) {
-                System.out.println("  Primeros UV coords: [" +
-                    mesh.getTexCoords().get(0) + ", " +
-                    mesh.getTexCoords().get(1) + "]");
+        // Escalar coordenadas UV para regalos
+        boolean esRegalo = nombreObjeto.toLowerCase().contains("regalo") ||
+                          nombreObjeto.toLowerCase().contains("gift") ||
+                          nombreObjeto.toLowerCase().contains("contenedor") ||
+                          nombreMaterial.toLowerCase().contains("papel_regalo") ||
+                          nombreMaterial.toLowerCase().contains("regalo");
+
+        if (esRegalo) {
+            // Escalar las coordenadas UV para repetir la textura
+            float escalaRepeticion = 3.0f; // La textura se repetirá 3 veces en cada dirección
+            for (int i = 0; i < mesh.getTexCoords().size(); i++) {
+                float coordActual = mesh.getTexCoords().get(i);
+                mesh.getTexCoords().set(i, coordActual * escalaRepeticion);
             }
+            System.out.println("  -> Coordenadas UV escaladas x" + escalaRepeticion + " para repetir textura en regalo: " + nombreObjeto);
         }
 
         // Crear MeshView
@@ -265,20 +280,8 @@ public class ObjImporter {
         }
 
         // Asignar material
-        String nombreMaterial = partesClave.length > 1 ? partesClave[1] : "default";
-
         PhongMaterial material = crearMaterial(nombreObjeto, nombreMaterial);
         meshView.setMaterial(material);
-
-        // Debug: Verificar que el material tiene textura
-        if (nombreObjeto.toLowerCase().contains("calle") || nombreObjeto.toLowerCase().contains("piso")) {
-            System.out.println("  Material aplicado. Tiene textura: " + (material.getDiffuseMap() != null));
-            if (material.getDiffuseMap() != null) {
-                System.out.println("  Textura tamaño: " + material.getDiffuseMap().getWidth() + "x" +
-                                   material.getDiffuseMap().getHeight());
-            }
-            System.out.println("  Color difuso: " + material.getDiffuseColor());
-        }
 
         // Asignar ID si es necesario
         if (nombreObjeto.toLowerCase().contains("pinata")) {
@@ -287,6 +290,12 @@ public class ObjImporter {
         } else if (nombreObjeto.toLowerCase().startsWith("luz_")) {
             meshView.setId(nombreObjeto);
             System.out.println("Asignado ID '" + nombreObjeto + "'");
+        } else if (nombreMaterial.toLowerCase().startsWith("light_") ||
+                   nombreMaterial.toLowerCase().contains("mat_luz_")) {
+            // Detectar luces del pino por su material (Light_ o Mat_Luz_)
+            String luzId = "luz_" + nombreObjeto;
+            meshView.setId(luzId);
+            System.out.println("Asignado ID '" + luzId + "' (detectado por material de luz: " + nombreMaterial + ")");
         }
 
         return meshView;
@@ -295,17 +304,67 @@ public class ObjImporter {
     private PhongMaterial crearMaterial(String nombreObjeto, String nombreMaterial) {
         PhongMaterial material = new PhongMaterial();
         String nombreLower = nombreObjeto.toLowerCase();
+        String materialLower = nombreMaterial.toLowerCase();
         boolean texturaAplicada = false;
 
-        // Intentar cargar texturas personalizadas según el nombre del objeto PRIMERO
-        if (nombreLower.contains("calle") || nombreLower.contains("piso") || nombreLower.contains("adoquin")) {
-            System.out.println("Detectado objeto de piso: " + nombreObjeto);
+        System.out.println("Creando material para objeto: '" + nombreObjeto + "' con material: '" + nombreMaterial + "'");
+
+        // PRIMERO: Detectar regalos por nombre de objeto o material (antes que otros)
+        boolean esRegalo = nombreLower.contains("regalo") || nombreLower.contains("gift") ||
+                          nombreLower.contains("contenedor_regalos") ||
+                          materialLower.contains("papel_regalo") || materialLower.contains("regalo") ||
+                          materialLower.contains("gift");
+
+        if (esRegalo) {
+            // Alternar entre las texturas 1.jpg y 4.png para los regalos
+            System.out.println("  -> REGALO detectado: " + nombreObjeto + " / " + nombreMaterial);
+
+            // Usar diferentes criterios para asegurar variedad
+            boolean usar1 = false;
+            if (nombreObjeto.contains("Caja") || nombreObjeto.contains("1")) {
+                usar1 = true;
+            } else if (nombreObjeto.contains("Cilindro") || nombreObjeto.contains("2")) {
+                usar1 = false;
+            } else if (nombreObjeto.contains("Contenedor")) {
+                usar1 = true;
+            } else {
+                // Para otros casos, usar hash
+                int hash = Math.abs(nombreObjeto.hashCode());
+                usar1 = (hash % 2 == 0);
+            }
+
+            String textura = usar1 ? "/textures/1.jpg" : "/textures/4.png";
+            if (cargarTextura(material, textura)) {
+                texturaAplicada = true;
+                System.out.println("  -> Textura de REGALO aplicada: " + textura);
+            }
+        } else if (materialLower.startsWith("casa_")) {
+            // Detectar paredes de casas y asignar textura uniforme
+            System.out.println("  -> PARED DE CASA detectada: " + nombreObjeto + " / " + nombreMaterial);
+
+            if (cargarTextura(material, "/textures/pared.png")) {
+                texturaAplicada = true;
+                System.out.println("  -> Textura de PARED aplicada: pared.png");
+            }
+        } else if (materialLower.contains("puerta")) {
+            // Detectar puertas y asignar textura
+            System.out.println("  -> PUERTA detectada: " + nombreObjeto + " / " + nombreMaterial);
+
+            if (cargarTextura(material, "/textures/puerta.jpeg") ||
+                cargarTextura(material, "/textures/puerta.jpg") ||
+                cargarTextura(material, "/textures/puerta.png")) {
+                texturaAplicada = true;
+                System.out.println("  -> Textura de PUERTA aplicada");
+            }
+
+        } else if (nombreLower.contains("calle") || nombreLower.contains("piso") || nombreLower.contains("adoquin")) {
+            System.out.println("  -> PISO detectado: " + nombreObjeto);
             if (cargarTextura(material, "/textures/piso.jpg") ||
                 cargarTextura(material, "/textures/piso.png")) {
                 texturaAplicada = true;
             }
         } else if (nombreLower.contains("pinata")) {
-            System.out.println("Detectado objeto piñata: " + nombreObjeto);
+            System.out.println("  -> PIÑATA detectada: " + nombreObjeto);
             if (cargarTextura(material, "/textures/pinata.jpg") ||
                 cargarTextura(material, "/textures/pinata.png")) {
                 texturaAplicada = true;
@@ -315,16 +374,27 @@ public class ObjImporter {
         // Intentar obtener material del archivo .mtl
         Material mtlMaterial = materiales.get(nombreMaterial);
 
+        // Verificar si es una luz (del pino o de la posada)
+        boolean esLuz = nombreLower.startsWith("luz_") ||
+                        nombreMaterial.toLowerCase().startsWith("light_") ||
+                        nombreMaterial.toLowerCase().contains("mat_luz_");
+
         if (mtlMaterial != null) {
-            // IMPORTANTE: Solo aplicar color difuso si NO hay textura
+            // IMPORTANTE: Solo aplicar color difuso si NO hay textura Y NO es una luz
             // En JavaFX, setDiffuseColor puede interferir con setDiffuseMap
-            if (!texturaAplicada && mtlMaterial.colorDifuso != null) {
+            if (!texturaAplicada && mtlMaterial.colorDifuso != null && !esLuz) {
                 material.setDiffuseColor(mtlMaterial.colorDifuso);
                 System.out.println("  - Aplicado color difuso del .mtl");
             } else if (texturaAplicada) {
                 // Si hay textura, asegurar que el color sea blanco para no interferir
                 material.setDiffuseColor(Color.WHITE);
                 System.out.println("  - Color difuso establecido a WHITE para no interferir con textura");
+            } else if (esLuz) {
+                // Para luces, usar color inicial rojo que será cambiado por la animación
+                material.setDiffuseColor(Color.RED);
+                material.setSpecularColor(Color.YELLOW);
+                material.setSpecularPower(32);
+                System.out.println("  - Color inicial ROJO aplicado a luz (será animado)");
             }
 
             // Para texturas, reducir el brillo especular
@@ -332,7 +402,8 @@ public class ObjImporter {
                 material.setSpecularColor(Color.gray(0.1));  // Muy poco brillo especular
                 material.setSpecularPower(2);  // Brillo muy difuso
                 System.out.println("  - Reducido brillo especular para textura");
-            } else if (mtlMaterial.colorEspecular != null) {
+            } else if (!esLuz && mtlMaterial.colorEspecular != null) {
+                // Solo aplicar color especular del MTL si NO es una luz
                 material.setSpecularColor(mtlMaterial.colorEspecular);
             }
             if (mtlMaterial.texturaDifusa != null && !texturaAplicada) {
@@ -381,6 +452,13 @@ public class ObjImporter {
                 material.setSpecularPower(20);
 
             } else if (nombreLower.startsWith("luz_")) {
+                material.setDiffuseColor(Color.RED);
+                material.setSpecularColor(Color.YELLOW);
+                material.setSpecularPower(32);
+
+            } else if (nombreMaterial.toLowerCase().startsWith("light_") ||
+                       nombreMaterial.toLowerCase().contains("mat_luz_")) {
+                // Luces del pino - empezar con color rojo
                 material.setDiffuseColor(Color.RED);
                 material.setSpecularColor(Color.YELLOW);
                 material.setSpecularPower(32);
